@@ -11,11 +11,11 @@ Field staff who works Shifts, walks Patrols, scans Checkpoints, and logs Inciden
 _Avoid_: Officer, security guard (use Guard alone)
 
 **Operations Manager**:
-Internal staff who monitors live Guard locations on the web app, receives Incident alerts, reviews Daily Activity Reports, and assigns Guards to Shifts. Cannot also hold the Admin role.
+Internal staff who monitors live Guard locations on the web app, receives Incident alerts, reviews Daily Activity Reports, and assigns Guards to Shifts. Scoped to the Site(s) they're assigned to (many-to-many: one Operations Manager can cover several Sites, one Site can have several Operations Managers). Cannot also hold the Admin role.
 _Avoid_: Manager, dispatcher
 
 **Admin**:
-Internal staff who manages Guard and Operations Manager accounts, creates Client/Site records, and assigns Guards to Shifts. Does not handle billing. Cannot also hold the Operations Manager role.
+Internal staff who manages Guard and Operations Manager accounts, creates Client/Site records, and assigns Guards to Shifts. Unrestricted visibility across all Sites company-wide. Does not handle billing. Cannot also hold the Operations Manager role.
 _Avoid_: Owner, super admin
 
 **Client**:
