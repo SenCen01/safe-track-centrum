@@ -44,3 +44,11 @@ export async function requireAdmin(): Promise<CurrentUser> {
   }
   return user;
 }
+
+export async function requireOperationsManager(): Promise<CurrentUser> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "operations_manager") {
+    throw new Error("Unauthorized");
+  }
+  return user;
+}
