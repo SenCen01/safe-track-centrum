@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "Safe Track Centrum",
+    "slug": "safe-track-centrum",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -20,6 +20,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "0ddb0771-b6fe-4100-ac1a-b1a89e4dba34"
+      }
+    },
+    "owner": "centrum-it"
   }
 }
