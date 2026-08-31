@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { logout } from "@/app/logout-action";
@@ -20,10 +21,10 @@ export default async function AdminLayout(props: LayoutProps<"/admin">) {
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center justify-between border-b px-6 py-3">
         <nav className="flex gap-4 text-sm font-medium">
-          <a href="/admin">Dashboard</a>
-          <a href="/admin/users">Users</a>
-          <a href="/admin/clients">Clients</a>
-          <a href="/admin/sites">Sites</a>
+          <Link href="/admin">Dashboard</Link>
+          <Link href="/admin/users">Users</Link>
+          <Link href="/admin/clients">Clients</Link>
+          <Link href="/admin/sites">Sites</Link>
         </nav>
         <div className="flex items-center gap-3 text-sm">
           <span>{user.fullName}</span>
