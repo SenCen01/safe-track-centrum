@@ -1,7 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import { useActionState } from "react";
 import { login, type LoginState } from "./actions";
+import { Button } from "@/components/ui/Button";
+import { Card, CardBody } from "@/components/ui/Card";
+import { FormError, Input, Label } from "@/components/ui/Input";
 
 const initialState: LoginState = { error: null };
 
@@ -9,42 +13,31 @@ export default function LoginPage() {
   const [state, formAction, pending] = useActionState(login, initialState);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-4">
-      <h1 className="text-xl font-semibold">Safe Track Centrum</h1>
-      <form action={formAction} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1 text-sm">
-          Email
-          <input
-            type="email"
-            name="email"
-            required
-            autoComplete="email"
-            className="rounded border px-3 py-2"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          Password
-          <input
-            type="password"
-            name="password"
-            required
-            autoComplete="current-password"
-            className="rounded border px-3 py-2"
-          />
-        </label>
-        {state.error && (
-          <p role="alert" className="text-sm text-red-600">
-            {state.error}
-          </p>
-        )}
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded bg-black px-3 py-2 text-white disabled:opacity-50"
-        >
-          {pending ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
+    <main className="flex min-h-screen flex-col items-center justify-center gap-8 bg-surface-alt px-4">
+      <div className="flex flex-col items-center gap-3">
+        <Image src="/images/logos/icon_logo.png" alt="" width={64} height={64} priority />
+        <h1 className="font-[family-name:var(--font-display)] text-2xl font-semibold text-[--centrum-text]">
+          Safe Track Centrum
+        </h1>
+      </div>
+      <Card className="w-full max-w-sm">
+        <CardBody>
+          <form action={formAction} className="flex flex-col gap-4">
+            <Label>
+              Email
+              <Input type="email" name="email" required autoComplete="email" />
+            </Label>
+            <Label>
+              Password
+              <Input type="password" name="password" required autoComplete="current-password" />
+            </Label>
+            {state.error && <FormError>{state.error}</FormError>}
+            <Button type="submit" size="full" loading={pending}>
+              Sign in
+            </Button>
+          </form>
+        </CardBody>
+      </Card>
     </main>
   );
 }
