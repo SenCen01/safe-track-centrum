@@ -14,6 +14,8 @@ packages/
 
 ## Getting started
 
+Requires Node >=22.20.0 (an `.nvmrc` is provided — `nvm use` if you have nvm installed).
+
 ```
 npm install
 ```

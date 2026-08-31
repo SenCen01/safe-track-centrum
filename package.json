@@ -1,6 +1,9 @@
 {
   "name": "safe-track-centrum",
   "private": true,
+  "engines": {
+    "node": ">=22.20.0"
+  },
   "workspaces": [
     "apps/*",
     "packages/*"
