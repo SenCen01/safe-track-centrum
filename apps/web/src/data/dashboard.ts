@@ -87,6 +87,49 @@ export async function listMyIncidents(): Promise<IncidentRecord[]> {
   }));
 }
 
+const SIGNED_URL_EXPIRY_SECONDS = 3600;
+
+// Keyed by incident id -> signed URLs for that incident's photos. The
+// incident-photos bucket is private; createSignedUrl only succeeds if the
+// calling user's own RLS (via the regular, non-admin client) permits
+// reading that object — that's the real access control here, the signed
+// URL itself is just how a private object becomes viewable in an <img>,
+// not a substitute for RLS.
+export async function listIncidentPhotoUrls(
+  incidentIds: string[],
+): Promise<Record<string, string[]>> {
+  await requireOperationsManager();
+  if (incidentIds.length === 0) return {};
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("incident_photos")
+    .select("incident_id, storage_path")
+    .in("incident_id", incidentIds);
+
+  if (error) throw new Error(error.message);
+
+  const result: Record<string, string[]> = {};
+
+  await Promise.all(
+    data.map(async (photo) => {
+      const { data: signed, error: signError } = await supabase.storage
+        .from("incident-photos")
+        .createSignedUrl(photo.storage_path, SIGNED_URL_EXPIRY_SECONDS);
+
+      if (signError || !signed) {
+        // A broken thumbnail shouldn't take down the whole dashboard.
+        console.error(`Failed to sign incident photo ${photo.storage_path}:`, signError);
+        return;
+      }
+
+      (result[photo.incident_id] ??= []).push(signed.signedUrl);
+    }),
+  );
+
+  return result;
+}
+
 export type DarRecord = {
   shiftId: string;
   patrolCount: number;

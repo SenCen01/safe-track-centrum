@@ -1,4 +1,4 @@
-import { listMySites, listMyShifts, listMyIncidents } from "@/data/dashboard";
+import { listMySites, listMyShifts, listMyIncidents, listIncidentPhotoUrls } from "@/data/dashboard";
 
 // No live/Realtime updates in this pass — ADR-0003 covers real-time
 // Incident alerts as separate future work, not built here.
@@ -8,6 +8,8 @@ export default async function DashboardPage() {
     listMyShifts(),
     listMyIncidents(),
   ]);
+
+  const photoUrlsByIncident = await listIncidentPhotoUrls(incidents.map((i) => i.id));
 
   return (
     <div className="flex flex-col gap-8">
@@ -64,21 +66,39 @@ export default async function DashboardPage() {
               <th className="pr-4">Guard</th>
               <th className="pr-4">Site</th>
               <th className="pr-4">Description</th>
-              <th>Occurred</th>
+              <th className="pr-4">Occurred</th>
+              <th>Photos</th>
             </tr>
           </thead>
           <tbody>
-            {incidents.map((i) => (
-              <tr key={i.id}>
-                <td className="pr-4 py-1">{i.guardName}</td>
-                <td className="pr-4 py-1">{i.siteName}</td>
-                <td className="pr-4 py-1">{i.description}</td>
-                <td className="py-1">{new Date(i.occurredAt).toLocaleString()}</td>
-              </tr>
-            ))}
+            {incidents.map((i) => {
+              const photoUrls = photoUrlsByIncident[i.id] ?? [];
+              return (
+                <tr key={i.id}>
+                  <td className="pr-4 py-1">{i.guardName}</td>
+                  <td className="pr-4 py-1">{i.siteName}</td>
+                  <td className="pr-4 py-1">{i.description}</td>
+                  <td className="pr-4 py-1">{new Date(i.occurredAt).toLocaleString()}</td>
+                  <td className="py-1">
+                    {photoUrls.length === 0 ? (
+                      "—"
+                    ) : (
+                      <div className="flex gap-2">
+                        {photoUrls.map((url) => (
+                          <a key={url} href={url} target="_blank" rel="noreferrer">
+                            {/* eslint-disable-next-line @next/next/no-img-element -- signed URLs from a private bucket, not worth next/image remote-pattern config for a thumbnail-sized dashboard gallery */}
+                            <img src={url} alt="Incident evidence" className="h-12 w-12 rounded object-cover" />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
             {incidents.length === 0 && (
               <tr>
-                <td colSpan={4} className="py-2 text-gray-500">
+                <td colSpan={5} className="py-2 text-gray-500">
                   No incidents yet.
                 </td>
               </tr>
