@@ -42,7 +42,13 @@
           "microphonePermission": false
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Safe Track Centrum shares your location with your Operations Manager while you're on shift, so they can confirm patrol coverage."
+        }
+      ]
     ],
     "extra": {
       "eas": {
