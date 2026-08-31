@@ -1,0 +1,5 @@
+# AI-agent skill tooling — irrelevant to the app build, and .claude/skills/*
+# are filesystem symlinks into .agents/skills/* that EAS's packaging step
+# can't recreate on Windows (EPERM).
+.claude/
+.agents/
