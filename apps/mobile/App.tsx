@@ -1,22 +1,62 @@
 import { useEffect, useState } from "react";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { NavigationContainer } from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import {
+  useFonts,
+  Manrope_400Regular,
+  Manrope_500Medium,
+  Manrope_600SemiBold,
+  Manrope_700Bold,
+} from "@expo-google-fonts/manrope";
+import { PlayfairDisplay_600SemiBold, PlayfairDisplay_700Bold } from "@expo-google-fonts/playfair-display";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./src/lib/supabase";
+import { colors, fonts } from "./src/lib/theme";
+import type { ShiftsStackParamList } from "./src/lib/navigation";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { ShiftsScreen } from "./src/screens/ShiftsScreen";
 import { ShiftDetailScreen } from "./src/screens/ShiftDetailScreen";
 import { PatrolScreen } from "./src/screens/PatrolScreen";
+import { IncidentReportScreen } from "./src/screens/IncidentReportScreen";
+import { ScheduleScreen } from "./src/screens/ScheduleScreen";
 
-type Screen =
-  | { name: "shifts" }
-  | { name: "shiftDetail"; shiftId: string }
-  | { name: "patrol"; patrolId: string; shiftId: string };
+const Stack = createNativeStackNavigator<ShiftsStackParamList>();
+const Tab = createBottomTabNavigator();
+
+function ShiftsStack({ onSignOut }: { onSignOut: () => void }) {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="ShiftsList">
+        {({ navigation }) => (
+          <ShiftsScreen
+            onSelectShift={(shiftId) => navigation.navigate("ShiftDetail", { shiftId })}
+            onSignOut={onSignOut}
+          />
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="ShiftDetail" component={ShiftDetailScreen} />
+      <Stack.Screen name="Patrol" component={PatrolScreen} />
+      <Stack.Screen name="IncidentReport" component={IncidentReportScreen} options={{ presentation: "modal" }} />
+    </Stack.Navigator>
+  );
+}
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
-  const [screen, setScreen] = useState<Screen>({ name: "shifts" });
+
+  const [fontsLoaded] = useFonts({
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+    PlayfairDisplay_600SemiBold,
+    PlayfairDisplay_700Bold,
+  });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -24,65 +64,54 @@ export default function App() {
       setCheckingSession(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
-      // Only reset to the shifts list on a genuine new sign-in — this event
-      // also fires on automatic token refresh, which must NOT kick a guard
-      // back to the shifts list mid-patrol.
-      if (event === "SIGNED_IN") {
-        setScreen({ name: "shifts" });
-      }
     });
 
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  if (checkingSession) {
+  if (checkingSession || !fontsLoaded) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator />
+        <ActivityIndicator color={colors.brand} />
       </View>
     );
   }
 
   if (!session) {
     return (
-      <View style={styles.container}>
-        <LoginScreen />
-        <StatusBar style="auto" />
-      </View>
+      <SafeAreaProvider>
+        <View style={styles.container}>
+          <LoginScreen />
+          <StatusBar style="dark" />
+        </View>
+      </SafeAreaProvider>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {screen.name === "shifts" && (
-        <ShiftsScreen
-          onSelectShift={(shiftId) => setScreen({ name: "shiftDetail", shiftId })}
-          onSignOut={() => supabase.auth.signOut()}
-        />
-      )}
-      {screen.name === "shiftDetail" && (
-        <ShiftDetailScreen
-          shiftId={screen.shiftId}
-          onBack={() => setScreen({ name: "shifts" })}
-          onOpenPatrol={(patrolId) => setScreen({ name: "patrol", patrolId, shiftId: screen.shiftId })}
-        />
-      )}
-      {screen.name === "patrol" && (
-        <PatrolScreen
-          patrolId={screen.patrolId}
-          onDone={() => setScreen({ name: "shiftDetail", shiftId: screen.shiftId })}
-        />
-      )}
-      <StatusBar style="auto" />
-    </View>
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <Tab.Navigator
+          screenOptions={{
+            headerShown: false,
+            tabBarActiveTintColor: colors.brand,
+            tabBarInactiveTintColor: colors.muted,
+            tabBarIcon: () => null,
+            tabBarLabelStyle: { fontFamily: fonts.bodyMedium, fontSize: 12 },
+          }}
+        >
+          <Tab.Screen name="Shifts">{() => <ShiftsStack onSignOut={() => supabase.auth.signOut()} />}</Tab.Screen>
+          <Tab.Screen name="Schedule" component={ScheduleScreen} />
+        </Tab.Navigator>
+      </NavigationContainer>
+      <StatusBar style="dark" />
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  // Crude safe-area stand-in (no react-native-safe-area-context wired yet)
-  // — fine for this pass, worth adding once we're building on real devices.
-  container: { flex: 1, backgroundColor: "#fff", paddingTop: 40 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  container: { flex: 1, backgroundColor: colors.background },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
 });

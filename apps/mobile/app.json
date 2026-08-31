@@ -41,7 +41,8 @@
           "cameraPermission": "Safe Track Centrum needs camera access to take a photo for an incident report.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {

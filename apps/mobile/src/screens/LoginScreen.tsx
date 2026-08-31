@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, Image } from "react-native";
 import { supabase } from "../lib/supabase";
+import { colors, fonts, radius } from "../lib/theme";
 
 export function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -40,41 +41,75 @@ export function LoginScreen() {
 
   return (
     <View style={styles.container}>
+      <Image source={require("../../assets/logos/icon_logo.png")} style={styles.logo} />
       <Text style={styles.title}>Safe Track Centrum</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
-        testID="email-input"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-        testID="password-input"
-      />
-      {error && (
-        <Text style={styles.error} testID="login-error">
-          {error}
-        </Text>
-      )}
-      <Pressable style={styles.button} onPress={handleLogin} disabled={pending} testID="login-button">
-        <Text style={styles.buttonText}>{pending ? "Signing in…" : "Sign in"}</Text>
-      </Pressable>
+      <View style={styles.card}>
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          placeholderTextColor={colors.muted}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
+          testID="email-input"
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          placeholderTextColor={colors.muted}
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+          testID="password-input"
+        />
+        {error && (
+          <Text style={styles.error} testID="login-error">
+            {error}
+          </Text>
+        )}
+        <Pressable style={styles.button} onPress={handleLogin} disabled={pending} testID="login-button">
+          <Text style={styles.buttonText}>{pending ? "Signing in…" : "Sign in"}</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", padding: 24, gap: 12 },
-  title: { fontSize: 20, fontWeight: "600", marginBottom: 12 },
-  input: { borderWidth: 1, borderColor: "#ccc", borderRadius: 6, padding: 10 },
-  button: { backgroundColor: "#000", borderRadius: 6, padding: 12, alignItems: "center" },
-  buttonText: { color: "#fff", fontWeight: "600" },
-  error: { color: "#dc2626" },
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+    gap: 20,
+    backgroundColor: colors.background,
+  },
+  logo: { width: 72, height: 72, resizeMode: "contain" },
+  title: { fontFamily: fonts.display, fontSize: 24, color: colors.text },
+  card: {
+    width: "100%",
+    maxWidth: 360,
+    gap: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  input: {
+    fontFamily: fonts.body,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    padding: 12,
+    color: colors.text,
+    backgroundColor: "#fff",
+  },
+  button: { backgroundColor: colors.brand, borderRadius: radius.md, padding: 14, alignItems: "center" },
+  buttonText: { fontFamily: fonts.bodyBold, color: "#fff", fontSize: 15 },
+  error: { fontFamily: fonts.body, color: colors.danger, fontSize: 13 },
 });
