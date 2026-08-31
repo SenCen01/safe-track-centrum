@@ -2,8 +2,10 @@ import { notFound } from "next/navigation";
 import { getSiteById } from "@/data/sites";
 import { getRouteBySiteId, listCheckpoints } from "@/data/checkpoints";
 import { listOperationsManagersForSite, listAllOperationsManagers } from "@/data/operations-managers";
+import { listShiftsForSite, listAllGuards } from "@/data/shifts";
 import { CheckpointForm } from "./checkpoint-form";
 import { AssignOmForm } from "./assign-om-form";
+import { ShiftForm } from "./shift-form";
 import { unassignOperationsManagerAction } from "./actions";
 
 export default async function SiteDetailPage(props: PageProps<"/admin/sites/[siteId]">) {
@@ -14,10 +16,12 @@ export default async function SiteDetailPage(props: PageProps<"/admin/sites/[sit
 
   const route = await getRouteBySiteId(siteId);
 
-  const [checkpoints, assignedOms, allOms] = await Promise.all([
+  const [checkpoints, assignedOms, allOms, shifts, guards] = await Promise.all([
     route ? listCheckpoints(route.id) : Promise.resolve([]),
     listOperationsManagersForSite(siteId),
     listAllOperationsManagers(),
+    listShiftsForSite(siteId),
+    listAllGuards(),
   ]);
 
   const assignedOmIds = new Set(assignedOms.map((om) => om.id));
@@ -88,6 +92,38 @@ export default async function SiteDetailPage(props: PageProps<"/admin/sites/[sit
           {assignedOms.length === 0 && <li className="text-gray-500">No Operations Managers assigned yet.</li>}
         </ul>
         <AssignOmForm siteId={siteId} operationsManagers={availableOms} />
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="font-medium">Shifts</h2>
+        <ShiftForm siteId={siteId} guards={guards} />
+        <table className="text-sm">
+          <thead>
+            <tr className="text-left">
+              <th className="pr-4">Guard</th>
+              <th className="pr-4">Start</th>
+              <th className="pr-4">End</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shifts.map((s) => (
+              <tr key={s.id}>
+                <td className="pr-4 py-1">{s.guardName}</td>
+                <td className="pr-4 py-1">{new Date(s.scheduledStart).toLocaleString()}</td>
+                <td className="pr-4 py-1">{new Date(s.scheduledEnd).toLocaleString()}</td>
+                <td className="py-1">{s.status}</td>
+              </tr>
+            ))}
+            {shifts.length === 0 && (
+              <tr>
+                <td colSpan={4} className="py-2 text-gray-500">
+                  No shifts yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </section>
     </div>
   );

@@ -2,10 +2,31 @@
 
 import { revalidatePath } from "next/cache";
 import { createCheckpoint } from "@/data/checkpoints";
+import { createShift } from "@/data/shifts";
 import {
   assignOperationsManagerToSite,
   unassignOperationsManagerFromSite,
 } from "@/data/operations-managers";
+
+export type CreateShiftFormState = { error: string | null };
+
+export async function createShiftAction(
+  _prevState: CreateShiftFormState,
+  formData: FormData,
+): Promise<CreateShiftFormState> {
+  const siteId = String(formData.get("siteId") ?? "");
+  const { error } = await createShift({
+    siteId,
+    guardId: String(formData.get("guardId") ?? ""),
+    scheduledStart: String(formData.get("scheduledStart") ?? ""),
+    scheduledEnd: String(formData.get("scheduledEnd") ?? ""),
+  });
+
+  if (error) return { error };
+
+  revalidatePath(`/admin/sites/${siteId}`);
+  return { error: null };
+}
 
 export type CreateCheckpointFormState = { error: string | null };
 
