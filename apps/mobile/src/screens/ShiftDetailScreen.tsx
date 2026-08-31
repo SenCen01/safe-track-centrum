@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { View, Text, Pressable, TextInput, StyleSheet, Alert, ScrollView } from "react-native";
 import * as Crypto from "expo-crypto";
+import * as ImagePicker from "expo-image-picker";
 import { supabase } from "../lib/supabase";
 import type { Shift, Patrol } from "../lib/types";
 
@@ -17,6 +18,9 @@ export function ShiftDetailScreen({ shiftId, onBack, onOpenPatrol }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [incidentText, setIncidentText] = useState("");
   const [incidentStatus, setIncidentStatus] = useState<string | null>(null);
+  const [lastIncidentId, setLastIncidentId] = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoStatus, setPhotoStatus] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const { data: shiftData } = await supabase
@@ -97,7 +101,8 @@ export function ShiftDetailScreen({ shiftId, onBack, onOpenPatrol }: Props) {
     if (!incidentText.trim()) return;
     setBusy(true);
     setIncidentStatus(null);
-    const { error: rpcError } = await supabase.rpc("log_incident", {
+    setPhotoStatus(null);
+    const { data, error: rpcError } = await supabase.rpc("log_incident", {
       p_shift_id: shiftId,
       p_description: incidentText.trim(),
       p_client_incident_id: Crypto.randomUUID(),
@@ -111,6 +116,66 @@ export function ShiftDetailScreen({ shiftId, onBack, onOpenPatrol }: Props) {
     }
     setIncidentText("");
     setIncidentStatus("Incident logged.");
+    setLastIncidentId((data as { id: string } | null)?.id ?? null);
+  }
+
+  // The incident itself is already recorded via log_incident regardless of
+  // what happens here — a failed photo upload must never read as "the
+  // incident report failed", it's an optional attachment on top of it.
+  async function handleAddPhoto(source: "camera" | "library") {
+    if (!lastIncidentId) return;
+
+    const permission =
+      source === "camera"
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      setPhotoStatus("Permission denied — can't attach a photo.");
+      return;
+    }
+
+    const result =
+      source === "camera"
+        ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
+        : await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
+
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    setPhotoUploading(true);
+    setPhotoStatus(null);
+    try {
+      const response = await fetch(asset.uri);
+      const arrayBuffer = await response.arrayBuffer();
+      const ext = asset.fileName?.split(".").pop() ?? "jpg";
+      const path = `${lastIncidentId}/${Crypto.randomUUID()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("incident-photos")
+        .upload(path, arrayBuffer, { contentType: asset.mimeType ?? "image/jpeg" });
+
+      if (uploadError) {
+        setPhotoStatus(`Photo upload failed: ${uploadError.message}`);
+        return;
+      }
+
+      const { error: attachError } = await supabase.rpc("attach_incident_photo", {
+        p_incident_id: lastIncidentId,
+        p_storage_path: path,
+      });
+
+      if (attachError) {
+        setPhotoStatus(`Photo uploaded but couldn't be linked: ${attachError.message}`);
+        return;
+      }
+
+      setPhotoStatus("Photo attached.");
+    } catch (err) {
+      setPhotoStatus(`Photo upload failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setPhotoUploading(false);
+    }
   }
 
   if (!shift) {
@@ -187,6 +252,28 @@ export function ShiftDetailScreen({ shiftId, onBack, onOpenPatrol }: Props) {
           <Text style={styles.buttonText}>Log Incident</Text>
         </Pressable>
         {incidentStatus && <Text testID="incident-status">{incidentStatus}</Text>}
+
+        {lastIncidentId && (
+          <View style={styles.photoRow}>
+            <Pressable
+              style={[styles.button, styles.secondaryButton]}
+              onPress={() => handleAddPhoto("camera")}
+              disabled={photoUploading}
+              testID="add-photo-camera-button"
+            >
+              <Text style={styles.buttonText}>{photoUploading ? "Uploading…" : "Take Photo"}</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.button, styles.secondaryButton]}
+              onPress={() => handleAddPhoto("library")}
+              disabled={photoUploading}
+              testID="add-photo-library-button"
+            >
+              <Text style={styles.buttonText}>{photoUploading ? "Uploading…" : "Choose Photo"}</Text>
+            </Pressable>
+          </View>
+        )}
+        {photoStatus && <Text testID="photo-status">{photoStatus}</Text>}
       </View>
     </ScrollView>
   );
@@ -205,4 +292,5 @@ const styles = StyleSheet.create({
   incidentSection: { gap: 8, borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingTop: 16 },
   sectionTitle: { fontWeight: "600" },
   textArea: { borderWidth: 1, borderColor: "#ccc", borderRadius: 6, padding: 10, minHeight: 60 },
+  photoRow: { flexDirection: "row", gap: 8 },
 });

@@ -21,6 +21,23 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Safe Track Centrum needs camera access to scan checkpoint QR codes.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Safe Track Centrum needs photo library access to attach photos to an incident report.",
+          "cameraPermission": "Safe Track Centrum needs camera access to take a photo for an incident report.",
+          "microphonePermission": false
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "0ddb0771-b6fe-4100-ac1a-b1a89e4dba34"
