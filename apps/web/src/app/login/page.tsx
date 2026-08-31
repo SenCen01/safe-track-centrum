@@ -15,7 +15,7 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-8 bg-surface-alt px-4">
       <div className="flex flex-col items-center gap-3">
-        <Image src="/images/logos/icon_logo.png" alt="" width={64} height={64} priority />
+        <Image src="/images/logos/icon_logo.png" alt="" width={64} height={64} priority className="h-16 w-16" />
         <h1 className="font-[family-name:var(--font-display)] text-2xl font-semibold text-[--centrum-text]">
           Safe Track Centrum
         </h1>

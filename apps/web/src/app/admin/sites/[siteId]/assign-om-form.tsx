@@ -3,6 +3,8 @@
 import { useActionState } from "react";
 import { assignOperationsManagerAction, type AssignOmFormState } from "./actions";
 import type { OperationsManagerRecord } from "@/data/operations-managers";
+import { Button } from "@/components/ui/Button";
+import { FormError, Label, Select } from "@/components/ui/Input";
 
 const initialState: AssignOmFormState = { error: null };
 
@@ -16,31 +18,23 @@ export function AssignOmForm({
   const [state, formAction, pending] = useActionState(assignOperationsManagerAction, initialState);
 
   return (
-    <form action={formAction} className="flex flex-wrap items-end gap-3 rounded border p-4">
+    <form action={formAction} className="flex flex-wrap items-end gap-4 rounded-xl bg-surface-alt p-4">
       <input type="hidden" name="siteId" value={siteId} />
-      <label className="flex flex-col gap-1 text-sm">
+      <Label className="min-w-[12rem] flex-1">
         Operations Manager
-        <select name="operationsManagerId" required className="rounded border px-2 py-1">
+        <Select name="operationsManagerId" required defaultValue="">
           <option value="">Select…</option>
           {operationsManagers.map((om) => (
             <option key={om.id} value={om.id}>
               {om.fullName}
             </option>
           ))}
-        </select>
-      </label>
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
-      >
-        {pending ? "Assigning…" : "Assign"}
-      </button>
-      {state.error && (
-        <p role="alert" className="w-full text-sm text-red-600">
-          {state.error}
-        </p>
-      )}
+        </Select>
+      </Label>
+      <Button type="submit" size="sm" loading={pending}>
+        Assign
+      </Button>
+      {state.error && <FormError>{state.error}</FormError>}
     </form>
   );
 }

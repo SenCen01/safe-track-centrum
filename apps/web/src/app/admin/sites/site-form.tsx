@@ -3,6 +3,9 @@
 import { useActionState } from "react";
 import { createSiteAction, type CreateSiteFormState } from "./actions";
 import type { ClientRecord } from "@/data/clients";
+import { Button } from "@/components/ui/Button";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import { FormError, Input, Label, Select } from "@/components/ui/Input";
 
 const initialState: CreateSiteFormState = { error: null };
 
@@ -10,38 +13,37 @@ export function SiteForm({ clients }: { clients: ClientRecord[] }) {
   const [state, formAction, pending] = useActionState(createSiteAction, initialState);
 
   return (
-    <form action={formAction} className="flex flex-wrap items-end gap-3 rounded border p-4">
-      <label className="flex flex-col gap-1 text-sm">
-        Name
-        <input name="name" required className="rounded border px-2 py-1" />
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        Address
-        <input name="address" required className="rounded border px-2 py-1" />
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        Client
-        <select name="clientId" required className="rounded border px-2 py-1">
-          <option value="">Select a client…</option>
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
-      >
-        {pending ? "Adding…" : "Add site"}
-      </button>
-      {state.error && (
-        <p role="alert" className="w-full text-sm text-red-600">
-          {state.error}
-        </p>
-      )}
-    </form>
+    <Card>
+      <CardHeader>
+        <h2 className="font-medium text-[--centrum-text]">Add a site</h2>
+      </CardHeader>
+      <CardBody>
+        <form action={formAction} className="flex flex-wrap items-end gap-4">
+          <Label className="min-w-[12rem] flex-1">
+            Name
+            <Input name="name" required />
+          </Label>
+          <Label className="min-w-[14rem] flex-1">
+            Address
+            <Input name="address" required />
+          </Label>
+          <Label className="min-w-[12rem] flex-1">
+            Client
+            <Select name="clientId" required defaultValue="">
+              <option value="">Select a client…</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          </Label>
+          <Button type="submit" loading={pending}>
+            Add site
+          </Button>
+          {state.error && <FormError>{state.error}</FormError>}
+        </form>
+      </CardBody>
+    </Card>
   );
 }

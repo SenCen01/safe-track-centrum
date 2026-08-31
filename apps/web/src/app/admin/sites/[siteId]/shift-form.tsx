@@ -3,6 +3,8 @@
 import { useActionState } from "react";
 import { createShiftAction, type CreateShiftFormState } from "./actions";
 import type { GuardRecord } from "@/data/shifts";
+import { Button } from "@/components/ui/Button";
+import { FormError, Input, Label, Select } from "@/components/ui/Input";
 
 const initialState: CreateShiftFormState = { error: null };
 
@@ -10,39 +12,31 @@ export function ShiftForm({ siteId, guards }: { siteId: string; guards: GuardRec
   const [state, formAction, pending] = useActionState(createShiftAction, initialState);
 
   return (
-    <form action={formAction} className="flex flex-wrap items-end gap-3 rounded border p-4">
+    <form action={formAction} className="flex flex-wrap items-end gap-4 rounded-xl bg-surface-alt p-4">
       <input type="hidden" name="siteId" value={siteId} />
-      <label className="flex flex-col gap-1 text-sm">
+      <Label className="min-w-[10rem] flex-1">
         Guard
-        <select name="guardId" required className="rounded border px-2 py-1">
+        <Select name="guardId" required defaultValue="">
           <option value="">Select a guard…</option>
           {guards.map((g) => (
             <option key={g.id} value={g.id}>
               {g.fullName}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
+        </Select>
+      </Label>
+      <Label>
         Scheduled start
-        <input type="datetime-local" name="scheduledStart" required className="rounded border px-2 py-1" />
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
+        <Input type="datetime-local" name="scheduledStart" required />
+      </Label>
+      <Label>
         Scheduled end
-        <input type="datetime-local" name="scheduledEnd" required className="rounded border px-2 py-1" />
-      </label>
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
-      >
-        {pending ? "Adding…" : "Add shift"}
-      </button>
-      {state.error && (
-        <p role="alert" className="w-full text-sm text-red-600">
-          {state.error}
-        </p>
-      )}
+        <Input type="datetime-local" name="scheduledEnd" required />
+      </Label>
+      <Button type="submit" size="sm" loading={pending}>
+        Add shift
+      </Button>
+      {state.error && <FormError>{state.error}</FormError>}
     </form>
   );
 }
