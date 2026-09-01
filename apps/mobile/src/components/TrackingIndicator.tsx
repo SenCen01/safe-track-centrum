@@ -34,6 +34,17 @@ export function TrackingIndicator({ status }: { status: TrackingStatus }) {
     );
   }
 
+  if (status === "unavailable") {
+    return (
+      <View style={[styles.container, styles.denied]} testID="tracking-indicator-unavailable">
+        <Text style={styles.deniedText}>
+          Location tracking isn&apos;t available on this build — your Operations Manager won&apos;t see your
+          position this shift.
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container} testID="tracking-indicator">
       <Animated.View style={[styles.dot, { opacity: pulse }]} />
