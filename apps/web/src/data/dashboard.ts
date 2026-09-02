@@ -1,6 +1,7 @@
 import "server-only";
 import { requireOperationsManager } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { vancouverDateString } from "@/lib/timezone";
 
 // Every query below relies on RLS to scope rows to this Operations Manager's
 // assigned Sites (see operations_manager_sites / om_covers_site() in the
@@ -56,6 +57,172 @@ export async function listMyShifts(): Promise<ShiftRecord[]> {
     scheduledEnd: s.scheduled_end,
     status: s.status,
   }));
+}
+
+export type LivePatrolRecord = {
+  patrolId: string;
+  shiftId: string;
+  siteId: string;
+  siteName: string;
+  guardName: string;
+  patrolNumberInShift: number;
+  startedAt: string;
+  checkpointsDone: number;
+  checkpointsTotal: number;
+  lastCheckpointName: string | null;
+  lastScannedAt: string | null;
+  nextCheckpointName: string | null;
+};
+
+type PatrolRouteEmbed = {
+  shift_id: string;
+  started_at: string;
+  shifts: { site_id: string; sites: { name: string } | null; profiles: { full_name: string } | null } | null;
+  routes: { checkpoints: { id: string; sequence_number: number; name: string }[] } | null;
+};
+
+export async function listLivePatrols(): Promise<LivePatrolRecord[]> {
+  await requireOperationsManager();
+  const supabase = await createClient();
+
+  const { data: activePatrols, error: activeError } = await supabase
+    .from("patrols")
+    .select(
+      "id, shift_id, started_at, shifts(site_id, sites(name), profiles!guard_id(full_name)), routes(checkpoints(id, sequence_number, name))",
+    )
+    .eq("status", "in_progress");
+
+  if (activeError) throw new Error(activeError.message);
+  if (activePatrols.length === 0) return [];
+
+  const shiftIds = [...new Set(activePatrols.map((p) => p.shift_id))];
+  const patrolIds = activePatrols.map((p) => p.id);
+
+  const [{ data: shiftPatrols, error: shiftPatrolsError }, { data: scans, error: scansError }] = await Promise.all([
+    // All Patrols (any status) for these Shifts, ordered, to compute each
+    // active Patrol's ordinal — the active-only query above can't derive
+    // this by itself.
+    supabase.from("patrols").select("id, shift_id, started_at").in("shift_id", shiftIds).order("started_at"),
+    supabase
+      .from("checkpoint_scans")
+      .select("patrol_id, sequence_number, scanned_at, checkpoints(name)")
+      .in("patrol_id", patrolIds)
+      .order("sequence_number", { ascending: false }),
+  ]);
+
+  if (shiftPatrolsError) throw new Error(shiftPatrolsError.message);
+  if (scansError) throw new Error(scansError.message);
+
+  const ordinalByPatrolId = new Map<string, number>();
+  const countByShiftId = new Map<string, number>();
+  for (const p of shiftPatrols) {
+    const ordinal = (countByShiftId.get(p.shift_id) ?? 0) + 1;
+    countByShiftId.set(p.shift_id, ordinal);
+    ordinalByPatrolId.set(p.id, ordinal);
+  }
+
+  const doneCountByPatrolId = new Map<string, number>();
+  const lastScanByPatrolId = new Map<string, { name: string; scannedAt: string }>();
+  for (const s of scans) {
+    doneCountByPatrolId.set(s.patrol_id, (doneCountByPatrolId.get(s.patrol_id) ?? 0) + 1);
+    // Ordered sequence_number desc above, so the first row seen per patrol is the last scan.
+    if (!lastScanByPatrolId.has(s.patrol_id)) {
+      lastScanByPatrolId.set(s.patrol_id, {
+        name: (s.checkpoints as unknown as { name: string } | null)?.name ?? "—",
+        scannedAt: s.scanned_at,
+      });
+    }
+  }
+
+  return (activePatrols as unknown as PatrolRouteEmbed[]).map((p, i) => {
+    const patrolId = activePatrols[i].id;
+    const checkpoints = (p.routes?.checkpoints ?? []).slice().sort((a, b) => a.sequence_number - b.sequence_number);
+    const checkpointsDone = doneCountByPatrolId.get(patrolId) ?? 0;
+    const lastScan = lastScanByPatrolId.get(patrolId) ?? null;
+    const nextCheckpoint = checkpoints.find((c) => c.sequence_number === checkpointsDone + 1) ?? null;
+
+    return {
+      patrolId,
+      shiftId: p.shift_id,
+      siteId: p.shifts?.site_id ?? "",
+      siteName: p.shifts?.sites?.name ?? "—",
+      guardName: p.shifts?.profiles?.full_name ?? "—",
+      patrolNumberInShift: ordinalByPatrolId.get(patrolId) ?? 1,
+      startedAt: p.started_at,
+      checkpointsDone,
+      checkpointsTotal: checkpoints.length,
+      lastCheckpointName: lastScan?.name ?? null,
+      lastScannedAt: lastScan?.scannedAt ?? null,
+      nextCheckpointName: nextCheckpoint?.name ?? null,
+    };
+  });
+}
+
+export type PatrolCheckpointScanRecord = {
+  id: string;
+  patrolId: string;
+  checkpointName: string;
+  sequenceNumber: number;
+  scannedAt: string;
+  photoStoragePath: string | null;
+};
+
+export async function listCheckpointScansForPatrols(patrolIds: string[]): Promise<PatrolCheckpointScanRecord[]> {
+  await requireOperationsManager();
+  if (patrolIds.length === 0) return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("checkpoint_scans")
+    .select("id, patrol_id, sequence_number, scanned_at, photo_storage_path, checkpoints(name)")
+    .in("patrol_id", patrolIds)
+    .order("sequence_number");
+
+  if (error) throw new Error(error.message);
+
+  return data.map((s) => ({
+    id: s.id,
+    patrolId: s.patrol_id,
+    checkpointName: (s.checkpoints as unknown as { name: string } | null)?.name ?? "—",
+    sequenceNumber: s.sequence_number,
+    scannedAt: s.scanned_at,
+    photoStoragePath: s.photo_storage_path,
+  }));
+}
+
+// Mirrors listIncidentPhotoUrls, but 1:1 (one photo per scan) rather than
+// 1:many — returns one signed URL per scan id instead of an array.
+export async function listCheckpointPhotoUrls(scanIds: string[]): Promise<Record<string, string>> {
+  await requireOperationsManager();
+  if (scanIds.length === 0) return {};
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("checkpoint_scans")
+    .select("id, photo_storage_path")
+    .in("id", scanIds)
+    .not("photo_storage_path", "is", null);
+
+  if (error) throw new Error(error.message);
+
+  const result: Record<string, string> = {};
+
+  await Promise.all(
+    data.map(async (scan) => {
+      const { data: signed, error: signError } = await supabase.storage
+        .from("checkpoint-photos")
+        .createSignedUrl(scan.photo_storage_path as string, SIGNED_URL_EXPIRY_SECONDS);
+
+      if (signError || !signed) {
+        console.error(`Failed to sign checkpoint photo ${scan.photo_storage_path}:`, signError);
+        return;
+      }
+
+      result[scan.id] = signed.signedUrl;
+    }),
+  );
+
+  return result;
 }
 
 export type IncidentRecord = {
@@ -130,31 +297,46 @@ export async function listIncidentPhotoUrls(
   return result;
 }
 
-export type DarRecord = {
-  shiftId: string;
-  patrolCount: number;
-  incompletePatrolCount: number;
-  incidentCount: number;
+export type DarSummaryRecord = {
+  siteId: string;
+  siteName: string;
+  date: string;
+  shiftCount: number;
 };
 
-export async function listMyDars(): Promise<DarRecord[]> {
+// One row per (Site, Vancouver calendar date) that had at least one Shift —
+// this is what the OM-facing "DAR" concept now means; the actual report is
+// generated on demand as a PDF via /api/sites/[siteId]/dar (see darPdf.ts),
+// not stored as its own record. Not available to Admin here (this list only
+// feeds the OM-only dars/page.tsx) — Admin's DAR access is API-only, see
+// the route handler's use of requireOperationsManagerOrAdmin().
+export async function listDarSummaries(): Promise<DarSummaryRecord[]> {
   await requireOperationsManager();
   const supabase = await createClient();
   const { data, error } = await supabase
-    .from("daily_activity_reports")
-    .select("shift_id, patrols, incidents")
-    .order("shift_id");
+    .from("shifts")
+    .select("site_id, scheduled_start, sites(name)")
+    .order("scheduled_start", { ascending: false })
+    .limit(500);
 
   if (error) throw new Error(error.message);
 
-  return data.map((d) => {
-    const patrols = (d.patrols ?? []) as Array<{ status: string }>;
-    const incidents = (d.incidents ?? []) as unknown[];
-    return {
-      shiftId: d.shift_id,
-      patrolCount: patrols.length,
-      incompletePatrolCount: patrols.filter((p) => p.status === "incomplete").length,
-      incidentCount: incidents.length,
-    };
-  });
+  const summaryByKey = new Map<string, DarSummaryRecord>();
+  for (const s of data) {
+    const date = vancouverDateString(s.scheduled_start);
+    const key = `${s.site_id}:${date}`;
+    const existing = summaryByKey.get(key);
+    if (existing) {
+      existing.shiftCount += 1;
+    } else {
+      summaryByKey.set(key, {
+        siteId: s.site_id,
+        siteName: (s.sites as unknown as { name: string } | null)?.name ?? "—",
+        date,
+        shiftCount: 1,
+      });
+    }
+  }
+
+  return [...summaryByKey.values()].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }

@@ -52,3 +52,13 @@ export async function requireOperationsManager(): Promise<CurrentUser> {
   }
   return user;
 }
+
+// For access points that should be open to both roles (e.g. the DAR PDF
+// route) without loosening the OM-only /dashboard UI gate itself.
+export async function requireOperationsManagerOrAdmin(): Promise<CurrentUser> {
+  const user = await getCurrentUser();
+  if (!user || (user.role !== "operations_manager" && user.role !== "admin")) {
+    throw new Error("Unauthorized");
+  }
+  return user;
+}

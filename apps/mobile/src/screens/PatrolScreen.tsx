@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from "expo-camera";
 import * as Crypto from "expo-crypto";
+import * as ImagePicker from "expo-image-picker";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { supabase } from "../lib/supabase";
 import { colors, fonts, radius } from "../lib/theme";
@@ -22,6 +23,7 @@ export function PatrolScreen({ route, navigation }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [manualMode, setManualMode] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
+  const [photoUploadingScanId, setPhotoUploadingScanId] = useState<string | null>(null);
 
   // A Patrol only exists while its Shift is in_progress, so tracking is
   // always active here.
@@ -52,7 +54,7 @@ export function PatrolScreen({ route, navigation }: Props) {
         .order("sequence_number"),
       supabase
         .from("checkpoint_scans")
-        .select("id, checkpoint_id, sequence_number")
+        .select("id, checkpoint_id, sequence_number, photo_storage_path")
         .eq("patrol_id", patrolId)
         .order("sequence_number"),
     ]);
@@ -68,6 +70,8 @@ export function PatrolScreen({ route, navigation }: Props) {
   const nextSequence = scans.length + 1;
   const isComplete = patrol?.status === "complete";
   const nextCheckpoint = checkpoints.find((c) => c.sequence_number === nextSequence);
+  const lastScan = scans[scans.length - 1] ?? null;
+  const lastScanCheckpoint = lastScan ? checkpoints.find((c) => c.id === lastScan.checkpoint_id) : null;
 
   async function handleScan(checkpoint: Checkpoint) {
     setBusy(true);
@@ -91,6 +95,41 @@ export function PatrolScreen({ route, navigation }: Props) {
     }
 
     await load();
+  }
+
+  // Optional, non-blocking add-on: the scan itself already happened via
+  // handleScan/scan_checkpoint above — this only ever attaches evidence to
+  // an existing scan row, single-tap camera capture, no gallery option
+  // (guard is still standing at the checkpoint, this should be fast).
+  async function attachPhoto(scan: CheckpointScan) {
+    setPhotoUploadingScanId(scan.id);
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) return;
+
+      const result = await ImagePicker.launchCameraAsync({ quality: 0.7 });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+
+      const response = await fetch(asset.uri);
+      const arrayBuffer = await response.arrayBuffer();
+      const ext = asset.fileName?.split(".").pop() ?? "jpg";
+      const path = `${scan.id}/${Crypto.randomUUID()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("checkpoint-photos")
+        .upload(path, arrayBuffer, { contentType: asset.mimeType ?? "image/jpeg" });
+
+      if (!uploadError) {
+        await supabase.rpc("attach_checkpoint_photo", { p_scan_id: scan.id, p_storage_path: path });
+        await load();
+      }
+    } catch {
+      // Best-effort — mirrors IncidentReportScreen's photo attach, a failed
+      // photo must never read as "the scan failed" (the scan already succeeded).
+    } finally {
+      setPhotoUploadingScanId(null);
+    }
   }
 
   function handleBarcodeScanned({ data }: BarcodeScanningResult) {
@@ -149,6 +188,24 @@ export function PatrolScreen({ route, navigation }: Props) {
             </View>
           ) : (
             <>
+              {lastScan && lastScanCheckpoint && (
+                <View style={styles.lastScannedRow} testID="last-scanned-row">
+                  <Text style={styles.body}>Scanned: {lastScanCheckpoint.name}</Text>
+                  <Pressable
+                    onPress={() => attachPhoto(lastScan)}
+                    disabled={!!lastScan.photo_storage_path || photoUploadingScanId === lastScan.id}
+                    testID="last-scanned-add-photo"
+                  >
+                    <Text style={styles.link}>
+                      {lastScan.photo_storage_path
+                        ? "✓ Photo"
+                        : photoUploadingScanId === lastScan.id
+                          ? "Uploading…"
+                          : "📷 Add photo"}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
               {nextCheckpoint && (
                 <View style={styles.nextBanner} testID="next-checkpoint-banner">
                   <Text style={styles.nextBannerLabel}>NEXT</Text>
@@ -172,7 +229,8 @@ export function PatrolScreen({ route, navigation }: Props) {
 
       {(manualMode || isComplete) &&
         checkpoints.map((c) => {
-          const done = scans.some((s) => s.checkpoint_id === c.id);
+          const scan = scans.find((s) => s.checkpoint_id === c.id) ?? null;
+          const done = !!scan;
           const isNext = !done && c.sequence_number === nextSequence;
           return (
             <Pressable
@@ -185,7 +243,24 @@ export function PatrolScreen({ route, navigation }: Props) {
               <Text style={styles.rowTitle}>
                 {c.sequence_number}. {c.name}
               </Text>
-              <Text style={styles.body}>{done ? "✓ Scanned" : isNext ? "Tap to scan" : "Not yet"}</Text>
+              <View style={styles.rowFooter}>
+                <Text style={styles.body}>{done ? "✓ Scanned" : isNext ? "Tap to scan" : "Not yet"}</Text>
+                {scan && (
+                  <Pressable
+                    onPress={() => attachPhoto(scan)}
+                    disabled={!!scan.photo_storage_path || photoUploadingScanId === scan.id}
+                    testID={`checkpoint-${c.id}-add-photo`}
+                  >
+                    <Text style={styles.link}>
+                      {scan.photo_storage_path
+                        ? "✓ Photo"
+                        : photoUploadingScanId === scan.id
+                          ? "Uploading…"
+                          : "📷 Add photo"}
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
             </Pressable>
           );
         })}
@@ -225,6 +300,12 @@ const styles = StyleSheet.create({
   link: { fontFamily: fonts.bodyMedium, color: colors.brand },
   error: { fontFamily: fonts.body, color: colors.danger },
   cameraWrap: { gap: 8 },
+  lastScannedRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 2,
+  },
   nextBanner: {
     flexDirection: "row",
     alignItems: "baseline",
@@ -249,6 +330,7 @@ const styles = StyleSheet.create({
   rowDone: { backgroundColor: "#f0fdf4", borderColor: "#86efac" },
   rowNext: { borderColor: colors.brand, borderWidth: 2 },
   rowTitle: { fontFamily: fonts.bodySemiBold, color: colors.text },
+  rowFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   complete: { fontFamily: fonts.display, fontSize: 17, color: colors.brand },
   button: { backgroundColor: colors.brand, borderRadius: radius.md, padding: 14, alignItems: "center" },
   buttonText: { fontFamily: fonts.bodyBold, color: "#fff", fontSize: 15 },

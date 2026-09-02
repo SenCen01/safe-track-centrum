@@ -21,6 +21,7 @@ export type CheckpointScan = {
   id: string;
   checkpoint_id: string;
   sequence_number: number;
+  photo_storage_path: string | null;
 };
 
 export type Patrol = {

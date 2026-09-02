@@ -45,9 +45,9 @@ One walk of a Site's Route by a Guard within a Shift, complete once every Checkp
 _Avoid_: Round, sweep
 
 **Incident**:
-A notable event a Guard logs, distinct from routine Checkpoint scans, that immediately notifies the Operations Manager and is also included in that Shift's Daily Activity Report. Can be logged at any point during a Shift, whether or not a Patrol is currently active.
+A notable event a Guard logs, distinct from routine Checkpoint scans, that immediately notifies the Operations Manager and is also included in that Site's Daily Activity Report for the day it occurred. Can be logged at any point during a Shift, whether or not a Patrol is currently active.
 _Avoid_: Alert (an Alert is the notification an Incident triggers, not the Incident itself)
 
 **Daily Activity Report (DAR)**:
-The report generated once per Shift, rolling up every Patrol and Incident that occurred during that Shift.
+The report generated per Site per day, rolling up every Guard's Shifts, Patrols, and Incidents at that Site on that calendar date (Vancouver time). Generated on demand as a downloadable PDF, not stored as its own record.
 _Avoid_: Summary, log
