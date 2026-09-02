@@ -29,10 +29,11 @@ export default async function DarsPage() {
                   <td className="px-5 py-3">
                     <a
                       href={`/api/sites/${d.siteId}/dar?date=${d.date}`}
-                      download
+                      target="_blank"
+                      rel="noreferrer"
                       className="font-medium text-brand hover:underline"
                     >
-                      Download PDF
+                      Generate Report
                     </a>
                   </td>
                 </tr>
