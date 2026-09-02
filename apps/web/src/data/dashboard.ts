@@ -59,6 +59,62 @@ export async function listMyShifts(): Promise<ShiftRecord[]> {
   }));
 }
 
+export type LiveGuardLocationRecord = {
+  shiftId: string;
+  guardName: string;
+  siteId: string;
+  siteName: string;
+  latitude: number;
+  longitude: number;
+  recordedAt: string;
+};
+
+// Most recent GPS ping per Guard currently on an in_progress Shift — broader
+// than "in an active Patrol" (a Guard clocked in but between Patrols still
+// shows up), matching what record_location_ping() actually tracks.
+export async function listLiveGuardLocations(): Promise<LiveGuardLocationRecord[]> {
+  await requireOperationsManager();
+  const supabase = await createClient();
+
+  const { data: shifts, error: shiftsError } = await supabase
+    .from("shifts")
+    .select("id, site_id, sites(name), profiles!guard_id(full_name)")
+    .eq("status", "in_progress");
+
+  if (shiftsError) throw new Error(shiftsError.message);
+  if (shifts.length === 0) return [];
+
+  const shiftIds = shifts.map((s) => s.id);
+  const { data: pings, error: pingsError } = await supabase
+    .from("guard_location_pings")
+    .select("shift_id, latitude, longitude, recorded_at")
+    .in("shift_id", shiftIds)
+    .order("recorded_at", { ascending: false });
+
+  if (pingsError) throw new Error(pingsError.message);
+
+  const latestByShift = new Map<string, { latitude: number; longitude: number; recorded_at: string }>();
+  for (const p of pings) {
+    if (!latestByShift.has(p.shift_id)) latestByShift.set(p.shift_id, p);
+  }
+
+  return shifts
+    .map((s) => {
+      const ping = latestByShift.get(s.id);
+      if (!ping) return null;
+      return {
+        shiftId: s.id,
+        guardName: (s.profiles as unknown as { full_name: string } | null)?.full_name ?? "—",
+        siteId: s.site_id,
+        siteName: (s.sites as unknown as { name: string } | null)?.name ?? "—",
+        latitude: ping.latitude,
+        longitude: ping.longitude,
+        recordedAt: ping.recorded_at,
+      };
+    })
+    .filter((r): r is LiveGuardLocationRecord => r !== null);
+}
+
 export type LivePatrolRecord = {
   patrolId: string;
   shiftId: string;

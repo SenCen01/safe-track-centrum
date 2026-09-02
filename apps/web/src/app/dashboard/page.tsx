@@ -1,4 +1,4 @@
-import { MapPin, Clock, AlertTriangle, Footprints } from "lucide-react";
+import { MapPin, Clock, AlertTriangle, Footprints, Radar } from "lucide-react";
 import {
   listMySites,
   listMyShifts,
@@ -7,19 +7,22 @@ import {
   listLivePatrols,
   listCheckpointScansForPatrols,
   listCheckpointPhotoUrls,
+  listLiveGuardLocations,
 } from "@/data/dashboard";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { Badge, statusLabel } from "@/components/ui/Badge";
 import { timeAgo } from "@/lib/format";
+import { GuardMap } from "@/components/dashboard/GuardMap";
 
 // No live/Realtime updates in this pass — ADR-0003 covers real-time
 // Incident alerts as separate future work, not built here.
 export default async function DashboardPage() {
-  const [sites, livePatrols, shifts, incidents] = await Promise.all([
+  const [sites, livePatrols, shifts, incidents, guardLocations] = await Promise.all([
     listMySites(),
     listLivePatrols(),
     listMyShifts(),
     listMyIncidents(),
+    listLiveGuardLocations(),
   ]);
 
   const photoUrlsByIncident = await listIncidentPhotoUrls(incidents.map((i) => i.id));
@@ -58,6 +61,30 @@ export default async function DashboardPage() {
             ))}
             {sites.length === 0 && <p className="text-sm text-[--centrum-muted]">No Sites assigned yet.</p>}
           </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <h2 className="flex items-center gap-2 font-medium text-[--centrum-text]">
+            <Radar size={16} className="text-brand" />
+            Live Guard Locations
+          </h2>
+        </CardHeader>
+        <CardBody className="p-0">
+          {guardLocations.length === 0 ? (
+            <p className="p-5 text-sm text-[--centrum-muted]">No Guards currently clocked in.</p>
+          ) : (
+            <GuardMap
+              locations={guardLocations.map((g) => ({
+                shiftId: g.shiftId,
+                guardName: g.guardName,
+                siteName: g.siteName,
+                latitude: g.latitude,
+                longitude: g.longitude,
+              }))}
+            />
+          )}
         </CardBody>
       </Card>
 

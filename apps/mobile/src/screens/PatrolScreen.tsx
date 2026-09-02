@@ -14,6 +14,12 @@ import type { ShiftsStackParamList } from "../lib/navigation";
 
 type Props = NativeStackScreenProps<ShiftsStackParamList, "Patrol">;
 
+// Two views: an overview (checklist — where you are, what's next) and a
+// scanning view (camera, scoped to one specific checkpoint) entered by
+// deliberately tapping into the next checkpoint. The camera is never just
+// sitting open — it only appears once you've committed to scanning a
+// specific checkpoint, and finishing (or cancelling) returns to the
+// checklist automatically.
 export function PatrolScreen({ route, navigation }: Props) {
   const { patrolId, shiftId } = route.params;
   const [patrol, setPatrol] = useState<Patrol | null>(null);
@@ -21,7 +27,8 @@ export function PatrolScreen({ route, navigation }: Props) {
   const [scans, setScans] = useState<CheckpointScan[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [manualMode, setManualMode] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [manualEntry, setManualEntry] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
 
   // A Patrol only exists while its Shift is in_progress, so tracking is
@@ -128,13 +135,15 @@ export function PatrolScreen({ route, navigation }: Props) {
       }
 
       await load();
+      setScanning(false);
+      setManualEntry(false);
     } finally {
       setBusy(false);
     }
   }
 
   function handleBarcodeScanned({ data }: BarcodeScanningResult) {
-    if (busy || isComplete) return;
+    if (busy || !scanning || manualEntry) return;
 
     const now = Date.now();
     if (lastScanRef.current && lastScanRef.current.code === data && now - lastScanRef.current.at < 2000) {
@@ -147,7 +156,24 @@ export function PatrolScreen({ route, navigation }: Props) {
       setError("That QR code doesn't belong to this site.");
       return;
     }
+    if (!nextCheckpoint || checkpoint.id !== nextCheckpoint.id) {
+      setError(`That's ${checkpoint.name} — you need ${nextCheckpoint?.name ?? "the next checkpoint"}.`);
+      return;
+    }
     completeCheckpoint(checkpoint);
+  }
+
+  function startScanning() {
+    setError(null);
+    setManualEntry(false);
+    setScanning(true);
+  }
+
+  function cancelScanning() {
+    if (busy) return;
+    setError(null);
+    setScanning(false);
+    setManualEntry(false);
   }
 
   if (!patrol) {
@@ -176,74 +202,83 @@ export function PatrolScreen({ route, navigation }: Props) {
         </Text>
       )}
 
-      {!isComplete && !manualMode && (
-        <View style={styles.cameraWrap}>
-          {!permission ? (
-            <Text style={styles.body}>Loading camera…</Text>
-          ) : !permission.granted ? (
-            <View style={styles.permissionBox}>
-              <Text style={styles.body}>Camera access is needed to scan checkpoint QR codes.</Text>
-              <Pressable style={styles.button} onPress={requestPermission} testID="grant-permission-button">
-                <Text style={styles.buttonText}>Grant Camera Permission</Text>
-              </Pressable>
-            </View>
-          ) : (
+      {scanning && !isComplete && nextCheckpoint ? (
+        <View style={styles.scanWrap}>
+          <View style={styles.scanHeader}>
+            <Text style={styles.scanHeaderLabel}>SCANNING</Text>
+            <Text style={styles.scanHeaderName}>{nextCheckpoint.name}</Text>
+          </View>
+
+          {!manualEntry ? (
             <>
-              {nextCheckpoint && (
-                <View style={styles.nextBanner} testID="next-checkpoint-banner">
-                  <Text style={styles.nextBannerLabel}>NEXT</Text>
-                  <Text style={styles.nextBannerText}>{nextCheckpoint.name}</Text>
+              {!permission ? (
+                <Text style={styles.body}>Loading camera…</Text>
+              ) : !permission.granted ? (
+                <View style={styles.permissionBox}>
+                  <Text style={styles.body}>Camera access is needed to scan checkpoint QR codes.</Text>
+                  <Pressable style={styles.button} onPress={requestPermission} testID="grant-permission-button">
+                    <Text style={styles.buttonText}>Grant Camera Permission</Text>
+                  </Pressable>
                 </View>
+              ) : (
+                <CameraView
+                  style={styles.camera}
+                  facing="back"
+                  barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                  onBarcodeScanned={handleBarcodeScanned}
+                  testID="camera-view"
+                />
               )}
-              <CameraView
-                style={styles.camera}
-                facing="back"
-                barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-                onBarcodeScanned={handleBarcodeScanned}
-                testID="camera-view"
-              />
-              <Text style={styles.hint}>Scanning opens your camera for a confirmation photo — that's expected.</Text>
+              <Text style={styles.hint}>Point your camera at the {nextCheckpoint.name} QR code.</Text>
+              <Pressable onPress={() => setManualEntry(true)} testID="manual-mode-toggle">
+                <Text style={styles.link}>QR damaged or unreadable? Confirm manually</Text>
+              </Pressable>
             </>
+          ) : (
+            <Pressable
+              style={styles.button}
+              onPress={() => completeCheckpoint(nextCheckpoint)}
+              disabled={busy}
+              testID="manual-confirm-button"
+            >
+              <Text style={styles.buttonText}>
+                {busy ? "Confirming…" : `Confirm ${nextCheckpoint.name} — Take Photo`}
+              </Text>
+            </Pressable>
           )}
-          <Pressable onPress={() => setManualMode(true)} testID="manual-mode-toggle">
-            <Text style={styles.link}>Having trouble scanning? Enter manually</Text>
+
+          <Pressable onPress={cancelScanning} disabled={busy} testID="cancel-scan-button">
+            <Text style={styles.link}>Cancel</Text>
           </Pressable>
         </View>
-      )}
+      ) : (
+        <>
+          {!isComplete && nextCheckpoint && (
+            <Pressable style={styles.nextCard} onPress={startScanning} testID="scan-next-button">
+              <Text style={styles.nextCardLabel}>NEXT CHECKPOINT</Text>
+              <Text style={styles.nextCardName}>{nextCheckpoint.name}</Text>
+              <Text style={styles.nextCardAction}>Tap to scan →</Text>
+            </Pressable>
+          )}
 
-      {checkpoints.map((c) => {
-        const scan = scans.find((s) => s.checkpoint_id === c.id) ?? null;
-        const done = !!scan;
-        const isNext = !done && c.sequence_number === nextSequence;
-        // Tapping to complete a checkpoint (skipping the QR scan itself) is
-        // only available in manual mode — that's the deliberate "camera/QR
-        // is broken" fallback. Outside it, this list is progress feedback
-        // only; the actual proof-of-presence still requires scanning the
-        // real QR code, matching CONTEXT.md's definition of what a
-        // Checkpoint scan is for.
-        const canTap = isNext && (manualMode || isComplete);
-        return (
-          <Pressable
-            key={c.id}
-            style={[styles.row, done && styles.rowDone, isNext && styles.rowNext]}
-            onPress={() => canTap && !busy && completeCheckpoint(c)}
-            disabled={!canTap || busy}
-            testID={`checkpoint-${c.id}`}
-          >
-            <Text style={styles.rowTitle}>
-              {c.sequence_number}. {c.name}
-            </Text>
-            <Text style={styles.body}>
-              {done ? "✓ Scanned · 📷 Photo" : isNext ? (manualMode ? "Tap to scan" : "Up next") : "Not yet"}
-            </Text>
-          </Pressable>
-        );
-      })}
-
-      {manualMode && !isComplete && (
-        <Pressable onPress={() => setManualMode(false)} testID="camera-mode-toggle">
-          <Text style={styles.link}>Use camera instead</Text>
-        </Pressable>
+          {checkpoints.map((c) => {
+            const scan = scans.find((s) => s.checkpoint_id === c.id) ?? null;
+            const done = !!scan;
+            const isNext = c.id === nextCheckpoint?.id;
+            return (
+              <View
+                key={c.id}
+                style={[styles.row, done && styles.rowDone, isNext && styles.rowNext]}
+                testID={`checkpoint-${c.id}`}
+              >
+                <Text style={styles.rowTitle}>
+                  {c.sequence_number}. {c.name}
+                </Text>
+                <Text style={styles.body}>{done ? "✓ Scanned · 📷 Photo" : isNext ? "Up next" : "Not yet"}</Text>
+              </View>
+            );
+          })}
+        </>
       )}
 
       <Pressable
@@ -274,19 +309,21 @@ const styles = StyleSheet.create({
   body: { fontFamily: fonts.body, fontSize: 14, color: colors.muted },
   link: { fontFamily: fonts.bodyMedium, color: colors.brand },
   error: { fontFamily: fonts.body, color: colors.danger },
-  cameraWrap: { gap: 8 },
   hint: { fontFamily: fonts.body, fontSize: 12, color: colors.muted, textAlign: "center" },
-  nextBanner: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: 8,
+  nextCard: {
+    gap: 4,
     backgroundColor: colors.brand,
     borderRadius: radius.md,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
   },
-  nextBannerLabel: { fontFamily: fonts.bodyBold, fontSize: 11, letterSpacing: 1, color: colors.mint },
-  nextBannerText: { fontFamily: fonts.bodySemiBold, fontSize: 16, color: "#fff" },
+  nextCardLabel: { fontFamily: fonts.bodyBold, fontSize: 11, letterSpacing: 1, color: colors.mint },
+  nextCardName: { fontFamily: fonts.bodySemiBold, fontSize: 20, color: "#fff" },
+  nextCardAction: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.mint },
+  scanWrap: { gap: 10 },
+  scanHeader: { alignItems: "center", gap: 2, marginBottom: 4 },
+  scanHeaderLabel: { fontFamily: fonts.bodyBold, fontSize: 11, letterSpacing: 1, color: colors.muted },
+  scanHeaderName: { fontFamily: fonts.display, fontSize: 22, color: colors.text },
   camera: { width: "100%", height: 320, borderRadius: radius.lg, overflow: "hidden" },
   permissionBox: { gap: 8, alignItems: "flex-start" },
   row: {
